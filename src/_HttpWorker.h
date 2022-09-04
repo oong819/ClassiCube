@@ -31,23 +31,12 @@ static void Http_BufferExpanded(struct HttpRequest* req, cc_uint32 read) {
 	if (req->contentLength) http_curProgress = (int)(100.0f * req->size / req->contentLength);
 }
 
+static void HttpBackend_Init(void);
+
 
 /*########################################################################################################################*
-*--------------------------------------------------Common downloader code-------------------------------------------------*
+*-------------------------------------------------Request/Response headers------------------------------------------------*
 *#########################################################################################################################*/
-/* Sets up state to begin a http request */
-static void Http_BeginRequest(struct HttpRequest* req, cc_string* url) {
-	Http_GetUrl(req, url);
-	Platform_Log2("Fetching %s (type %b)", url, &req->requestType);
-
-	Mutex_Lock(curRequestMutex);
-	{
-		http_curRequest  = *req;
-		http_curProgress = HTTP_PROGRESS_MAKING_REQUEST;
-	}
-	Mutex_Unlock(curRequestMutex);
-}
-
 static void Http_ParseCookie(struct HttpRequest* req, const cc_string* value) {
 	cc_string name, data;
 	int dataEnd;
@@ -119,21 +108,6 @@ static void Http_SetRequestHeaders(struct HttpRequest* req) {
 	Http_AddHeader(req, "Cookie", &cookies);
 }
 
-static void Http_SignalWorker(void) { Waitable_Signal(workerWaitable); }
-
-/* Adds a req to the list of pending requests, waking up worker thread if needed */
-static void HttpBackend_Add(struct HttpRequest* req, cc_uint8 flags) {
-	Mutex_Lock(pendingMutex);
-	{	
-		RequestList_Append(&pendingReqs, req, flags);
-	}
-	Mutex_Unlock(pendingMutex);
-	Http_SignalWorker();
-}
-
-static void HttpBackend_Init(void);
-static cc_result HttpBackend_Do(struct HttpRequest* req, cc_string* url);
-
 
 /*########################################################################################################################*
 *----------------------------------------------------Http public api------------------------------------------------------*
@@ -192,8 +166,33 @@ void Http_TryCancel(int reqID) {
 
 
 /*########################################################################################################################*
-*-----------------------------------------------------Worker frontend-----------------------------------------------------*
+*--------------------------------------------------Worker implementation--------------------------------------------------*
 *#########################################################################################################################*/
+/* Adds a req to the list of pending requests, waking up worker thread if needed */
+static void HttpBackend_Add(struct HttpRequest* req, cc_uint8 flags) {
+	Mutex_Lock(pendingMutex);
+	{	
+		RequestList_Append(&pendingReqs, req, flags);
+	}
+	Mutex_Unlock(pendingMutex);
+	Waitable_Signal(workerWaitable);
+}
+
+/* Sets up state to begin a http request */
+static void Http_BeginRequest(struct HttpRequest* req, cc_string* url) {
+	Http_GetUrl(req, url);
+	Platform_Log2("Fetching %s (type %b)", url, &req->requestType);
+
+	Mutex_Lock(curRequestMutex);
+	{
+		http_curRequest  = *req;
+		http_curProgress = HTTP_PROGRESS_MAKING_REQUEST;
+	}
+	Mutex_Unlock(curRequestMutex);
+}
+
+static cc_result HttpBackend_Do(struct HttpRequest* req, cc_string* url);
+
 static void ClearCurrentRequest(void) {
 	Mutex_Lock(curRequestMutex);
 	{

@@ -288,7 +288,6 @@
     <ClCompile Include="Http_Curl.c" />
     <ClCompile Include="Http_Web.c" />
     <ClCompile Include="Http_Win.c" />
-    <ClCompile Include="Http_Worker.c" />
     <ClCompile Include="Inventory.c" />
     <ClCompile Include="Launcher.c" />
     <ClCompile Include="LBackend.c" />

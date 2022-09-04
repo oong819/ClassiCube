@@ -9,24 +9,8 @@ cc_bool Http_DescribeError(cc_result res, cc_string* dst) {
     return false;
 }
 
-static void HttpBackend_Init(void) {
-    
-}
 
-static void Http_AddHeader(struct HttpRequest* req, const char* key, const cc_string* value) {
-    char tmp[NATIVE_STR_LEN];
-    CFStringRef keyCF, valCF;
-    CFHTTPMessageRef msg = (CFHTTPMessageRef)req->meta;
-    Platform_EncodeUtf8(tmp, value);
-    
-    keyCF = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
-    valCF = CFStringCreateWithCString(NULL, tmp, kCFStringEncodingUTF8);
-    CFHTTPMessageSetHeaderFieldValue(msg, keyCF, valCF);
-    CFRelease(keyCF);
-    CFRelease(valCF);
-}
-
-static void Http_CheckHeader(const void* k, const void* v, void* ctx) {
+static void ParseHeader(const void* k, const void* v, void* ctx) {
     cc_string line; char lineBuffer[2048];
     char keyBuf[128]  = { 0 };
     char valBuf[1024] = { 0 };
@@ -45,12 +29,26 @@ static cc_result ParseResponseHeaders(struct HttpRequest* req, CFReadStreamRef s
     if (!response) return ERR_INVALID_ARGUMENT;
     
     CFDictionaryRef headers = CFHTTPMessageCopyAllHeaderFields(response);
-    CFDictionaryApplyFunction(headers, Http_CheckHeader, req);
+    CFDictionaryApplyFunction(headers, ParseHeader, req);
     req->statusCode = CFHTTPMessageGetResponseStatusCode(response);
     
     CFRelease(headers);
     CFRelease(response);
     return 0;
+}
+
+
+static void Http_AddHeader(struct HttpRequest* req, const char* key, const cc_string* value) {
+    char tmp[NATIVE_STR_LEN];
+    CFStringRef keyCF, valCF;
+    CFHTTPMessageRef msg = (CFHTTPMessageRef)req->meta;
+    Platform_EncodeUtf8(tmp, value);
+    
+    keyCF = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+    valCF = CFStringCreateWithCString(NULL, tmp, kCFStringEncodingUTF8);
+    CFHTTPMessageSetHeaderFieldValue(msg, keyCF, valCF);
+    CFRelease(keyCF);
+    CFRelease(valCF);
 }
 
 static cc_result HttpBackend_Do(struct HttpRequest* req, cc_string* url) {
@@ -115,5 +113,10 @@ static cc_result HttpBackend_Do(struct HttpRequest* req, cc_string* url) {
     //Thread_Sleep(1000);
     CFRelease(request);
     return result;
+}
+
+
+static void HttpBackend_Init(void) {
+
 }
 #endif

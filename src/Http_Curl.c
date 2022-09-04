@@ -47,6 +47,112 @@ static struct curl_slist* (APIENTRY *_curl_slist_append)(struct curl_slist* l, c
 static const char* (APIENTRY *_curl_easy_strerror)(CURLcode res);
 /* === END CURL HEADERS === */
 
+static CURL* curl;
+
+cc_bool Http_DescribeError(cc_result res, cc_string* dst) {
+	const char* err;
+	
+	if (!_curl_easy_strerror) return false;
+	err = _curl_easy_strerror((CURLcode)res);
+	if (!err) return false;
+
+	String_AppendConst(dst, err);
+	return true;
+}
+
+
+/* Processes a HTTP header downloaded from the server */
+static size_t Http_ProcessHeader(char* buffer, size_t size, size_t nitems, void* userdata) {
+	struct HttpRequest* req = (struct HttpRequest*)userdata;
+	size_t len = nitems;
+	cc_string line;
+	/* line usually has \r\n at end */
+	if (len && buffer[len - 1] == '\n') len--;
+	if (len && buffer[len - 1] == '\r') len--;
+
+	line = String_Init(buffer, len, len);
+	Http_ParseHeader(req, &line);
+	return nitems;
+}
+
+/* Processes a chunk of data downloaded from the web server */
+static size_t Http_ProcessData(char *buffer, size_t size, size_t nitems, void* userdata) {
+	struct HttpRequest* req = (struct HttpRequest*)userdata;
+
+	if (!req->_capacity) Http_BufferInit(req);
+	Http_BufferEnsure(req, nitems);
+
+	Mem_Copy(&req->data[req->size], buffer, nitems);
+	Http_BufferExpanded(req, nitems);
+	return nitems;
+}
+
+
+static void Http_AddHeader(struct HttpRequest* req, const char* key, const cc_string* value) {
+	cc_string tmp; char tmpBuffer[1024];
+	String_InitArray_NT(tmp, tmpBuffer);
+	String_Format2(&tmp, "%c: %s", key, value);
+
+	tmp.buffer[tmp.length] = '\0';
+	req->meta = _curl_slist_append((struct curl_slist*)req->meta, tmp.buffer);
+}
+
+/* Sets general curl options for a request */
+static void Http_SetCurlOpts(struct HttpRequest* req) {
+	_curl_easy_setopt(curl, CURLOPT_USERAGENT,      GAME_APP_NAME);
+	_curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	_curl_easy_setopt(curl, CURLOPT_MAXREDIRS,      20L);
+
+	_curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, Http_ProcessHeader);
+	_curl_easy_setopt(curl, CURLOPT_HEADERDATA,     req);
+	_curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,  Http_ProcessData);
+	_curl_easy_setopt(curl, CURLOPT_WRITEDATA,      req);
+
+	if (httpsVerify) return;
+	_curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+}
+
+static cc_result HttpBackend_Do(struct HttpRequest* req, cc_string* url) {
+	char urlStr[NATIVE_STR_LEN];
+	void* post_data = req->data;
+	CURLcode res;
+	if (!curl) return ERR_NOT_SUPPORTED;
+
+	req->meta = NULL;
+	Http_SetRequestHeaders(req);
+	_curl_easy_setopt(curl, CURLOPT_HTTPHEADER, req->meta);
+
+	Http_SetCurlOpts(req);
+	Platform_EncodeUtf8(urlStr, url);
+	_curl_easy_setopt(curl, CURLOPT_URL, urlStr);
+
+	if (req->requestType == REQUEST_TYPE_HEAD) {
+		_curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+	} else if (req->requestType == REQUEST_TYPE_POST) {
+		_curl_easy_setopt(curl, CURLOPT_POST,   1L);
+		_curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, req->size);
+		_curl_easy_setopt(curl, CURLOPT_POSTFIELDS,    req->data);
+
+		/* per curl docs, we must persist POST data until request finishes */
+		req->data = NULL;
+		req->size = 0;
+	} else {
+		/* Undo POST/HEAD state */
+		_curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+	}
+
+	req->_capacity   = 0;
+	http_curProgress = HTTP_PROGRESS_FETCHING_DATA;
+	res = _curl_easy_perform(curl);
+	http_curProgress = 100;
+
+	_curl_slist_free_all((struct curl_slist*)req->meta);
+	/* can free now that request has finished */
+	Mem_Free(post_data);
+	return res;
+}
+
+
 #if defined CC_BUILD_WIN
 static const cc_string curlLib = String_FromConst("libcurl.dll");
 static const cc_string curlAlt = String_FromConst("curl.dll");
@@ -84,20 +190,6 @@ static cc_bool LoadCurlFuncs(void) {
 	return success;
 }
 
-static CURL* curl;
-static cc_bool curlSupported;
-
-cc_bool Http_DescribeError(cc_result res, cc_string* dst) {
-	const char* err;
-	
-	if (!_curl_easy_strerror) return false;
-	err = _curl_easy_strerror((CURLcode)res);
-	if (!err) return false;
-
-	String_AppendConst(dst, err);
-	return true;
-}
-
 static void HttpBackend_Init(void) {
 	static const cc_string msg = String_FromConst("Failed to init libcurl. All HTTP requests will therefore fail.");
 	CURLcode res;
@@ -108,96 +200,5 @@ static void HttpBackend_Init(void) {
 
 	curl = _curl_easy_init();
 	if (!curl) { Logger_SimpleWarn(res, "initing curl_easy"); return; }
-	curlSupported = true;
-}
-
-static void Http_AddHeader(struct HttpRequest* req, const char* key, const cc_string* value) {
-	cc_string tmp; char tmpBuffer[1024];
-	String_InitArray_NT(tmp, tmpBuffer);
-	String_Format2(&tmp, "%c: %s", key, value);
-
-	tmp.buffer[tmp.length] = '\0';
-	req->meta = _curl_slist_append((struct curl_slist*)req->meta, tmp.buffer);
-}
-
-/* Processes a HTTP header downloaded from the server */
-static size_t Http_ProcessHeader(char* buffer, size_t size, size_t nitems, void* userdata) {
-	struct HttpRequest* req = (struct HttpRequest*)userdata;
-	size_t len = nitems;
-	cc_string line;
-	/* line usually has \r\n at end */
-	if (len && buffer[len - 1] == '\n') len--;
-	if (len && buffer[len - 1] == '\r') len--;
-
-	line = String_Init(buffer, len, len);
-	Http_ParseHeader(req, &line);
-	return nitems;
-}
-
-/* Processes a chunk of data downloaded from the web server */
-static size_t Http_ProcessData(char *buffer, size_t size, size_t nitems, void* userdata) {
-	struct HttpRequest* req = (struct HttpRequest*)userdata;
-
-	if (!req->_capacity) Http_BufferInit(req);
-	Http_BufferEnsure(req, nitems);
-
-	Mem_Copy(&req->data[req->size], buffer, nitems);
-	Http_BufferExpanded(req, nitems);
-	return nitems;
-}
-
-/* Sets general curl options for a request */
-static void Http_SetCurlOpts(struct HttpRequest* req) {
-	_curl_easy_setopt(curl, CURLOPT_USERAGENT,      GAME_APP_NAME);
-	_curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-	_curl_easy_setopt(curl, CURLOPT_MAXREDIRS,      20L);
-
-	_curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, Http_ProcessHeader);
-	_curl_easy_setopt(curl, CURLOPT_HEADERDATA,     req);
-	_curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,  Http_ProcessData);
-	_curl_easy_setopt(curl, CURLOPT_WRITEDATA,      req);
-
-	if (httpsVerify) return;
-	_curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-}
-
-static cc_result HttpBackend_Do(struct HttpRequest* req, cc_string* url) {
-	char urlStr[NATIVE_STR_LEN];
-	void* post_data = req->data;
-	CURLcode res;
-	if (!curlSupported) return ERR_NOT_SUPPORTED;
-
-	req->meta = NULL;
-	Http_SetRequestHeaders(req);
-	_curl_easy_setopt(curl, CURLOPT_HTTPHEADER, req->meta);
-
-	Http_SetCurlOpts(req);
-	Platform_EncodeUtf8(urlStr, url);
-	_curl_easy_setopt(curl, CURLOPT_URL, urlStr);
-
-	if (req->requestType == REQUEST_TYPE_HEAD) {
-		_curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-	} else if (req->requestType == REQUEST_TYPE_POST) {
-		_curl_easy_setopt(curl, CURLOPT_POST,   1L);
-		_curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, req->size);
-		_curl_easy_setopt(curl, CURLOPT_POSTFIELDS,    req->data);
-
-		/* per curl docs, we must persist POST data until request finishes */
-		req->data = NULL;
-		req->size = 0;
-	} else {
-		/* Undo POST/HEAD state */
-		_curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-	}
-
-	req->_capacity   = 0;
-	http_curProgress = HTTP_PROGRESS_FETCHING_DATA;
-	res = _curl_easy_perform(curl);
-	http_curProgress = 100;
-
-	_curl_slist_free_all((struct curl_slist*)req->meta);
-	/* can free now that request has finished */
-	Mem_Free(post_data);
-	return res;
 }
 #endif

@@ -23,18 +23,6 @@ cc_bool Http_DescribeError(cc_result res, cc_string* dst) {
 	return true;
 }
 
-static void Http_AddHeader(struct HttpRequest* req, const char* key, const cc_string* value) {
-	JNIEnv* env;
-	jvalue args[2];
-
-	JavaGetCurrentEnv(env);
-	args[0].l = JavaMakeConst(env,  key);
-	args[1].l = JavaMakeString(env, value);
-
-	JavaSCall_Void(env, JAVA_httpSetHeader, args);
-	(*env)->DeleteLocalRef(env, args[0].l);
-	(*env)->DeleteLocalRef(env, args[1].l);
-}
 
 /* Processes a HTTP header downloaded from the server */
 static void JNICALL java_HttpParseHeader(JNIEnv* env, jobject o, jstring header) {
@@ -53,24 +41,18 @@ static void JNICALL java_HttpAppendData(JNIEnv* env, jobject o, jbyteArray arr, 
 	Http_BufferExpanded(req, len);
 }
 
-static const JNINativeMethod methods[] = {
-	{ "httpParseHeader", "(Ljava/lang/String;)V", java_HttpParseHeader },
-	{ "httpAppendData",  "([BI)V",                java_HttpAppendData }
-};
-static void CacheMethodRefs(JNIEnv* env) {
-	JAVA_httpInit      = JavaGetSMethod(env, "httpInit",      "(Ljava/lang/String;Ljava/lang/String;)I");
-	JAVA_httpSetHeader = JavaGetSMethod(env, "httpSetHeader", "(Ljava/lang/String;Ljava/lang/String;)V");
-	JAVA_httpPerform   = JavaGetSMethod(env, "httpPerform",   "()I");
-	JAVA_httpSetData   = JavaGetSMethod(env, "httpSetData",   "([B)I");
 
-	JAVA_httpDescribeError = JavaGetSMethod(env, "httpDescribeError", "(I)Ljava/lang/String;");
-}
-
-static void HttpBackend_Init(void) {
+static void Http_AddHeader(struct HttpRequest* req, const char* key, const cc_string* value) {
 	JNIEnv* env;
+	jvalue args[2];
+
 	JavaGetCurrentEnv(env);
-	JavaRegisterNatives(env, methods);
-	CacheMethodRefs(env);
+	args[0].l = JavaMakeConst(env,  key);
+	args[1].l = JavaMakeString(env, value);
+
+	JavaSCall_Void(env, JAVA_httpSetHeader, args);
+	(*env)->DeleteLocalRef(env, args[0].l);
+	(*env)->DeleteLocalRef(env, args[1].l);
 }
 
 static cc_result Http_InitReq(JNIEnv* env, struct HttpRequest* req, cc_string* url) {
@@ -115,5 +97,26 @@ static cc_result HttpBackend_Do(struct HttpRequest* req, cc_string* url) {
 	res = JavaSCall_Int(env, JAVA_httpPerform, NULL);
 	http_curProgress = 100;
 	return res;
+}
+
+
+static const JNINativeMethod methods[] = {
+	{ "httpParseHeader", "(Ljava/lang/String;)V", java_HttpParseHeader },
+	{ "httpAppendData",  "([BI)V",                java_HttpAppendData }
+};
+static void CacheMethodRefs(JNIEnv* env) {
+	JAVA_httpInit      = JavaGetSMethod(env, "httpInit",      "(Ljava/lang/String;Ljava/lang/String;)I");
+	JAVA_httpSetHeader = JavaGetSMethod(env, "httpSetHeader", "(Ljava/lang/String;Ljava/lang/String;)V");
+	JAVA_httpPerform   = JavaGetSMethod(env, "httpPerform",   "()I");
+	JAVA_httpSetData   = JavaGetSMethod(env, "httpSetData",   "([B)I");
+
+	JAVA_httpDescribeError = JavaGetSMethod(env, "httpDescribeError", "(I)Ljava/lang/String;");
+}
+
+static void HttpBackend_Init(void) {
+	JNIEnv* env;
+	JavaGetCurrentEnv(env);
+	JavaRegisterNatives(env, methods);
+	CacheMethodRefs(env);
 }
 #endif

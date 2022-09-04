@@ -50,6 +50,12 @@ static HINTERNET (WINAPI *_HttpOpenRequestA)(HINTERNET hConnect, PCSTR verb, PCS
 static BOOL      (WINAPI *_HttpSendRequestA)(HINTERNET hRequest, PCSTR headers, DWORD headersLength, PVOID optional, DWORD optionalLength);
 /* === END wininet.h === */
 
+static void* wininet_lib;
+cc_bool Http_DescribeError(cc_result res, cc_string* dst) {
+	return Platform_DescribeErrorExt(res, dst, wininet_lib);
+}
+
+
 /* caches connections to web servers */
 struct HttpCacheEntry {
 	HINTERNET Handle;  /* Native connection handle. */
@@ -146,29 +152,6 @@ static cc_result HttpCache_Lookup(struct HttpCacheEntry* e) {
 	return HttpCache_Insert(i, e);
 }
 
-static void* wininet_lib;
-cc_bool Http_DescribeError(cc_result res, cc_string* dst) {
-	return Platform_DescribeErrorExt(res, dst, wininet_lib);
-}
-
-static void HttpBackend_Init(void) {
-	static const struct DynamicLibSym funcs[] = {
-		DynamicLib_Sym(InternetCloseHandle), 
-		DynamicLib_Sym(InternetConnectA),   DynamicLib_Sym(InternetOpenA),       
-		DynamicLib_Sym(InternetSetOptionA), DynamicLib_Sym(InternetQueryOptionA),
-		DynamicLib_Sym(InternetReadFile),   DynamicLib_Sym(InternetQueryDataAvailable),
-		DynamicLib_Sym(HttpOpenRequestA),   DynamicLib_Sym(HttpSendRequestA),   
-		DynamicLib_Sym(HttpQueryInfoA),     DynamicLib_Sym(HttpAddRequestHeadersA)
-
-	};
-	static const cc_string wininet = String_FromConst("wininet.dll");
-	DynamicLib_LoadAll(&wininet, funcs, Array_Elems(funcs), &wininet_lib);
-	if (!wininet_lib) return;
-
-	/* TODO: Should we use INTERNET_OPEN_TYPE_PRECONFIG instead? */
-	hInternet = _InternetOpenA(GAME_APP_NAME, INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
-	if (!hInternet) Logger_Abort2(GetLastError(), "Failed to init WinINet");
-}
 
 static void Http_AddHeader(struct HttpRequest* req, const char* key, const cc_string* value) {
 	cc_string tmp; char tmpBuffer[1024];
@@ -271,5 +254,25 @@ static cc_result HttpBackend_Do(struct HttpRequest* req, cc_string* url) {
 	}
 
 	return _InternetCloseHandle(handle) ? 0 : GetLastError();
+}
+
+
+static void HttpBackend_Init(void) {
+	static const struct DynamicLibSym funcs[] = {
+		DynamicLib_Sym(InternetCloseHandle), 
+		DynamicLib_Sym(InternetConnectA),   DynamicLib_Sym(InternetOpenA),       
+		DynamicLib_Sym(InternetSetOptionA), DynamicLib_Sym(InternetQueryOptionA),
+		DynamicLib_Sym(InternetReadFile),   DynamicLib_Sym(InternetQueryDataAvailable),
+		DynamicLib_Sym(HttpOpenRequestA),   DynamicLib_Sym(HttpSendRequestA),   
+		DynamicLib_Sym(HttpQueryInfoA),     DynamicLib_Sym(HttpAddRequestHeadersA)
+
+	};
+	static const cc_string wininet = String_FromConst("wininet.dll");
+	DynamicLib_LoadAll(&wininet, funcs, Array_Elems(funcs), &wininet_lib);
+	if (!wininet_lib) return;
+
+	/* TODO: Should we use INTERNET_OPEN_TYPE_PRECONFIG instead? */
+	hInternet = _InternetOpenA(GAME_APP_NAME, INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+	if (!hInternet) Logger_Abort2(GetLastError(), "Failed to init WinINet");
 }
 #endif
