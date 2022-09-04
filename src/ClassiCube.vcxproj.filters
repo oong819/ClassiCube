@@ -590,5 +590,22 @@
     <ClCompile Include="GameVersion.c">
       <Filter>Source Files\Game</Filter>
     </ClCompile>
+    <ClCompile Include="Http_Win.c">
+      <Filter>Source Files\Network</Filter>
+    </ClCompile>
+    <ClCompile Include="Http_Curl.c">
+      <Filter>Source Files\Network</Filter>
+    </ClCompile>
+    <ClCompile Include="Http_Android.c">
+      <Filter>Source Files\Network</Filter>
+    </ClCompile>
+    <ClCompile Include="Http_CFNetwork.c">
+      <Filter>Source Files\Network</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="_HttpWorker.h">
+      <Filter>Header Files\Network</Filter>
+    </None>
   </ItemGroup>
 </Project>

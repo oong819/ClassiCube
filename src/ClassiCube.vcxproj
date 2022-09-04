@@ -283,7 +283,11 @@
     <ClCompile Include="Graphics_GL2.c" />
     <ClCompile Include="Gui.c" />
     <ClCompile Include="HeldBlockRenderer.c" />
+    <ClCompile Include="Http_Android.c" />
+    <ClCompile Include="Http_CFNetwork.c" />
+    <ClCompile Include="Http_Curl.c" />
     <ClCompile Include="Http_Web.c" />
+    <ClCompile Include="Http_Win.c" />
     <ClCompile Include="Http_Worker.c" />
     <ClCompile Include="Inventory.c" />
     <ClCompile Include="Launcher.c" />
@@ -346,6 +350,9 @@
     <ClCompile Include="_smooth.c" />
     <ClCompile Include="_truetype.c" />
     <ClCompile Include="_type1.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="_HttpWorker.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
