@@ -156,7 +156,7 @@ Thus it is **NOT SAFE** to allocate a string on the stack. */
 #define CC_BUILD_WIN
 #define CC_BUILD_D3D9
 #define CC_BUILD_WINGUI
-#define CC_BUILD_WININET
+#define CC_BUILD_WINHTTP
 #define CC_BUILD_WINMM
 #elif defined __ANDROID__
 #define CC_BUILD_ANDROID

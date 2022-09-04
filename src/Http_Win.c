@@ -288,12 +288,12 @@ static void HttpBackend_Init(void) {
 #endif
 #include <windows.h>
 #include "Errors.h"
-#include <WinHttp.h>
+#include <winhttp.h>
 #pragma comment(lib, "WinHttp")
 
-static void* wininet_lib;
+static void* winhttp_lib;
 cc_bool Http_DescribeError(cc_result res, cc_string* dst) {
-	return Platform_DescribeErrorExt(res, dst, wininet_lib);
+	return Platform_DescribeErrorExt(res, dst, winhttp_lib);
 }
 
 
@@ -481,12 +481,23 @@ static cc_result HttpBackend_Do(struct HttpRequest* req, cc_string* url) {
 
 
 static void HttpBackend_Init(void) {
+	static const cc_string winhttp = String_FromConst("winhttp.dll");
 	cc_string appName = String_FromConst(GAME_APP_NAME);
 	WCHAR appBuffer[NATIVE_STR_LEN];
+	DWORD flags;
 	Platform_EncodeUtf16(appBuffer, &appName);
+
+	winhttp_lib = DynamicLib_Load2(&winhttp);
 
 	/* TODO: Should we use WINHTTP_ACCESS_TYPE_DEFAULT_PROXY instead? */
 	hInternet = WinHttpOpen(appBuffer, WINHTTP_ACCESS_TYPE_NO_PROXY, NULL, NULL, 0);
 	if (!hInternet) Logger_Abort2(GetLastError(), "Failed to init WinHttp");
+
+	/* Older systems might only support up to TLS 1.0 */
+    flags = WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
+    WinHttpSetOption(hInternet, WINHTTP_OPTION_SECURE_PROTOCOLS, &flags, sizeof(flags)); 
+	flags = WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+    WinHttpSetOption(hInternet, WINHTTP_OPTION_SECURE_PROTOCOLS, &flags, sizeof(flags));
+
 }
 #endif
