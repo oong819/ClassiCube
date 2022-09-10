@@ -417,6 +417,9 @@ static cc_result Http_StartRequest(struct HttpRequest* req, cc_string* url) {
 	if (!httpsVerify) flags |= SECURITY_FLAG_IGNORE_UNKNOWN_CA;
 	WinHttpSetOption(handle,   WINHTTP_OPTION_SECURITY_FLAGS, &flags, sizeof(flags));
 
+	DWORD_PTR ctx = (DWORD_PTR)req;
+	WinHttpSetOption(handle, WINHTTP_OPTION_CONTEXT_VALUE, &ctx, sizeof(ctx));
+
 	Http_SetRequestHeaders(req);
 	return WinHttpSendRequest(handle, NULL, 0, req->data, req->size, req->size, 0) ? 0 : GetLastError();
 }
@@ -480,24 +483,36 @@ static cc_result HttpBackend_Do(struct HttpRequest* req, cc_string* url) {
 }
 
 
+static void CALLBACK Http_StatusCallback(HINTERNET internet, DWORD_PTR context, DWORD statusType,
+										LPVOID statusValue, DWORD statusValueLength) {
+	struct HttpRequest* req = (struct HttpRequest*)context;
+	if (statusType != WINHTTP_CALLBACK_STATUS_SECURE_FAILURE) return;
+
+	/* https://docs.microsoft.com/en-us/windows/win32/api/winhttp/nc-winhttp-winhttp_status_callback */
+	req->contentLength = *((DWORD*)statusValue);
+	return;
+}
+
+#define __UNIQUOTE(str) L##str
+#define UNIQUOTE(str) L#str
+
 static void HttpBackend_Init(void) {
 	static const cc_string winhttp = String_FromConst("winhttp.dll");
-	cc_string appName = String_FromConst(GAME_APP_NAME);
-	WCHAR appBuffer[NATIVE_STR_LEN];
+	const WCHAR* appName = UNIQUOTE(GAME_APP_NAME);
 	DWORD flags;
-	Platform_EncodeUtf16(appBuffer, &appName);
 
 	winhttp_lib = DynamicLib_Load2(&winhttp);
 
 	/* TODO: Should we use WINHTTP_ACCESS_TYPE_DEFAULT_PROXY instead? */
-	hInternet = WinHttpOpen(appBuffer, WINHTTP_ACCESS_TYPE_NO_PROXY, NULL, NULL, 0);
+	hInternet = WinHttpOpen(appName, WINHTTP_ACCESS_TYPE_NO_PROXY, NULL, NULL, 0);
 	if (!hInternet) Logger_Abort2(GetLastError(), "Failed to init WinHttp");
 
 	/* Older systems might only support up to TLS 1.0 */
-    flags = WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
+	flags = WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
     WinHttpSetOption(hInternet, WINHTTP_OPTION_SECURE_PROTOCOLS, &flags, sizeof(flags)); 
 	flags = WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
     WinHttpSetOption(hInternet, WINHTTP_OPTION_SECURE_PROTOCOLS, &flags, sizeof(flags));
 
+	WinHttpSetStatusCallback(hInternet, Http_StatusCallback, WINHTTP_CALLBACK_FLAG_SECURE_FAILURE, 0);
 }
 #endif
