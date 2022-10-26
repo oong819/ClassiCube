@@ -32,7 +32,7 @@ int Math_Ceil(float value) {
 	return valueI < value ? valueI + 1 : valueI;
 }
 
-int Math_Log2(cc_uint32 value) {
+int Math_ilog2(cc_uint32 value) {
 	cc_uint32 r = 0;
 	while (value >>= 1) r++;
 	return r;
@@ -80,23 +80,23 @@ cc_bool Math_IsPowOf2(int value) {
 	return value != 0 && (value & (value - 1)) == 0;
 }
 
-double Math_Log(double x) {
+double Math_Log2(double x) {
 	/* x = 2^exp * mantissa */
 	/*  so log(x) = log(2^exp) + log(mantissa) */
 	/*  so log(x) = exp*log(2) + log(mantissa) */
 	/* now need to work out log(mantissa) */
 
-	return log(x);
+	return log2(x);
 }
 
-double Math_Exp(double x) {
+double Math_Exp2(double x) {
 	/* let x = k*log(2) + f, where k is integer */
 	/*  so exp(x) = exp(k*log(2)) * exp(f) */
 	/*  so exp(x) = exp(log(2^k)) * exp(f) */
 	/*  so exp(x) = 2^k           * exp(f) */
 	/* now need to work out exp(f) */
 
-	return exp(x);
+	return exp2(x);
 }
 
 

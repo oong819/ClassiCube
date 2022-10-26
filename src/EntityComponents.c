@@ -1176,14 +1176,14 @@ static double PhysicsComp_YPosAt(int t, float u) {
 	/* x(t, u) = Σv(t, u) from 0 to t (since we work in discrete timesteps) */
 	/* plugging into Wolfram Alpha gives 1 equation as */
 	/* (0.98^t) * (-49u - 196) - 4t + 50u + 196 */
-	double a = Math_Exp(-0.0202027 * t); /* ~0.98^t */
+	double a = Math_Exp2(-0.02914634 * t); /* ~0.98^t */
 	return a * (-49 * u - 196) - 4 * t + 50 * u + 196;
 }
 
 double PhysicsComp_CalcMaxHeight(float u) {
 	/* equation below comes from solving diff(x(t, u))= 0 */
 	/* We only work in discrete timesteps, so test both rounded up and down */
-	double t = 49.49831645 * Math_Log(0.247483075 * u + 0.9899323);
+	double t = 34.30961849 * Math_Log2(0.247483075 * u + 0.9899323);
 	double value_floor = PhysicsComp_YPosAt((int)t,     u);
 	double value_ceil  = PhysicsComp_YPosAt((int)t + 1, u);
 	return max(value_floor, value_ceil);

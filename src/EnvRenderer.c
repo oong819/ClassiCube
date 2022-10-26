@@ -20,10 +20,11 @@
 #include "Options.h"
 
 cc_bool EnvRenderer_Legacy, EnvRenderer_Minimal;
+#define LOG2_E 1.44269504089
 
 static float CalcBlendFactor(float x) {
-	/* return -0.05 + 0.22 * (Math_Log(x) * 0.25f); */
-	double blend = -0.13 + 0.28 * (Math_Log(x) * 0.25);
+	/* return -0.05 + 0.055 * (Math_Log2(x) / LOG2_E); */
+	double blend = -0.13 + 0.07 * (Math_Log2(x) / LOG2_E);
 	if (blend < 0.0) blend = 0.0;
 	if (blend > 1.0) blend = 1.0;
 	return (float)blend;

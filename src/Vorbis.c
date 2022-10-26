@@ -202,9 +202,8 @@ static float float32_unpack(struct VorbisState* ctx) {
 	cc_uint32 exponent = (x & 0x7fe00000) >> 21;
 	if (x & 0x80000000UL) mantissa = -mantissa;
 
-	#define LOG_2 0.693147180559945
 	/* TODO: Can we make this more accurate? maybe ldexp ?? */
-	return (float)(mantissa * Math_Exp(LOG_2 * ((int)exponent - 788))); /* pow(2, x) */
+	return (float)(mantissa * Math_Exp2((int)exponent - 788)); /* pow(2, x) */
 }
 
 
@@ -987,7 +986,7 @@ void imdct_init(struct imdct_state* state, int n) {
 	float *A = state->a, *B = state->b, *C = state->c;
 	cc_uint32* reversed;
 
-	log2_n   = Math_Log2(n);
+	log2_n   = Math_ilog2(n);
 	reversed = state->reversed;
 	state->n = n; state->log2_n = log2_n;
 
